@@ -36,3 +36,4 @@ public:
 
     void setPosition(Square sq) { m_position = sq; }
     void setHasMoved(bool v)    { m_hasMoved = v; }
+}}
