@@ -36,7 +36,6 @@ public:
 
     void setPosition(Square sq) { m_position = sq; }
     void setHasMoved(bool v)    { m_hasMoved = v; }
-}}
 
     // Helper: is opponent's piece at target?
     bool isEnemy(Color other) const { return m_color != other && other != Color::None; }
