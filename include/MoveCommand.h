@@ -41,6 +41,7 @@ private:
     int                      m_prevHalfmoveClock = 0;
     bool                     m_wasPromotion = false;
     PieceType                m_promotedTo   = PieceType::None;
+    bool                     m_wasFirstMove = false;
 
     void executeNormal(Board& board);
     void executeCastle(Board& board, bool kingside);

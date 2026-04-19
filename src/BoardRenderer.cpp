@@ -247,68 +247,7 @@ sf::Sprite BoardRenderer::makePieceSprite(const Piece* piece, sf::Vector2f pos) 
     return sprite;
 }
 
-// ─── Promotion Dialog ────────────────────────────────────────────────────────
 
-void BoardRenderer::renderPromotionDialog(sf::RenderWindow& window, Color color) {
-    float sz  = m_config.squareSize;
-    float off = m_config.boardOffset;
-
-    // Dialog background
-    sf::RectangleShape bg(sf::Vector2f(sz * 4, sz * 1.6f));
-    float dlgX = off + sz * 2;
-    float dlgY = (color == Color::White) ? off : off + sz * 6.4f;
-    bg.setPosition(dlgX, dlgY);
-    bg.setFillColor(sf::Color(30, 30, 30, 230));
-    bg.setOutlineColor(sf::Color::White);
-    bg.setOutlineThickness(2.f);
-    window.draw(bg);
-
-    // Four promotion pieces
-    std::vector<PieceType> opts = {
-        PieceType::Queen, PieceType::Rook, PieceType::Bishop, PieceType::Knight
-    };
-    m_promotionRects.clear();
-    for (int i = 0; i < 4; ++i) {
-        float px = dlgX + i * sz;
-        float py = dlgY + sz * 0.3f;
-
-        // Hover background
-        sf::RectangleShape cell(sf::Vector2f(sz, sz));
-        cell.setPosition(px, py);
-        cell.setFillColor(sf::Color(80, 80, 80, 180));
-        window.draw(cell);
-
-        // Create a temporary piece to render
-        // We directly look up texture
-        std::string key;
-        key += (color == Color::White) ? 'w' : 'b';
-        switch (opts[i]) {
-            case PieceType::Queen:  key += 'Q'; break;
-            case PieceType::Rook:   key += 'R'; break;
-            case PieceType::Bishop: key += 'B'; break;
-            case PieceType::Knight: key += 'N'; break;
-            default: break;
-        }
-        auto it = m_textures.find(key);
-        if (it != m_textures.end()) {
-            sf::Sprite sp;
-            sp.setTexture(it->second);
-            auto tsz = it->second.getSize();
-            sp.setScale(sz / tsz.x * 0.9f, sz / tsz.y * 0.9f);
-            sp.setPosition(px + sz * 0.05f, py + sz * 0.05f);
-            window.draw(sp);
-        }
-        m_promotionRects[opts[i]] = sf::FloatRect(px, py, sz, sz);
-    }
-}
-
-PieceType BoardRenderer::getPromotionChoice(sf::Vector2i pixel, Color color) const {
-    for (auto& [type, rect] : m_promotionRects) {
-        if (rect.contains(static_cast<float>(pixel.x), static_cast<float>(pixel.y)))
-            return type;
-    }
-    return PieceType::None;
-}
 
 // ─── Coordinate Conversion ───────────────────────────────────────────────────
 

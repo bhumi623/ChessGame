@@ -45,11 +45,8 @@ public:
                 std::optional<Square> lastMoveTo,
                 std::optional<Square> kingInCheck);
 
-    void renderPromotionDialog(sf::RenderWindow& window, Color color);
-
     std::optional<Square> pixelToSquare(sf::Vector2i pixel) const;
     sf::Vector2f          squareToPixel(Square sq) const;
-    PieceType             getPromotionChoice(sf::Vector2i pixel, Color color) const;
 
     void setDragPiece(Piece* piece, sf::Vector2f pos);
     void clearDragPiece();
@@ -75,7 +72,6 @@ private:
     sf::Font                             m_font;
     Piece*                               m_dragPiece = nullptr;
     sf::Vector2f                         m_dragPos;
-    mutable std::map<PieceType, sf::FloatRect> m_promotionRects;
 #else
     Piece* m_dragPiece = nullptr;
 #endif

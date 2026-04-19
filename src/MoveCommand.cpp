@@ -13,6 +13,11 @@ void MoveCommand::execute(Board& board) {
     m_prevCastleRights    = board.getCastleRights();
     m_prevHalfmoveClock   = board.getHalfmoveClock();
 
+    Piece* initialMover = board.getPieceAt(m_move.from);
+    if (initialMover && !initialMover->hasMoved()) {
+        m_wasFirstMove = true;
+    }
+
     board.setEnPassantTarget(std::nullopt); // clear by default; PawnDouble sets it
 
     switch (m_move.type) {
@@ -174,8 +179,7 @@ void MoveCommand::undo(Board& board) {
             auto piece = board.removePiece(m_move.to);
             if (piece) {
                 // Restore hasMoved if it was the first move
-                // (we can't know for certain, but setHasMoved(false) only
-                //  matters for castling / pawn double push tracking)
+                if (m_wasFirstMove) piece->setHasMoved(false);
                 board.placePiece(std::move(piece), m_move.from);
             }
             if (m_capturedPiece)

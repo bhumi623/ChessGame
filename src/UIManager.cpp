@@ -19,16 +19,17 @@ bool UIManager::loadFont(const std::string& fontPath) {
 
 // ─── Update ──────────────────────────────────────────────────────────────────
 
-void UIManager::update(GameState state, Color activeColor) {
+void UIManager::update(GameState state, Color activeColor, const GameManager& gm) {
     float elapsed = m_sfClock.restart().asSeconds();
+
 
     if (!m_clockRunning) {
         m_clockRunning = true;
         m_clockColor   = activeColor;
     }
 
-    // Only tick clock during active play
-    if (state == GameState::Playing || state == GameState::Check) {
+    // Only tick clock during active play, after the first move
+    if ((state == GameState::Playing || state == GameState::Check) && !gm.getMoveHistory().empty()) {
         if (activeColor == Color::White)
             m_whiteTimeSeconds = std::max(0.f, m_whiteTimeSeconds - elapsed);
         else
@@ -44,8 +45,9 @@ void UIManager::render(sf::RenderWindow& window, const GameManager& gm) {
     drawPlayerInfo(window, gm);
     drawMoveHistory(window, gm);
     drawStatus(window, gm);
-    drawButtons(window);
+    drawButtons(window, gm);
     drawCapturedPieces(window, gm);
+    drawGameOver(window, gm);
 }
 
 // ─── Panel Background ────────────────────────────────────────────────────────
@@ -77,8 +79,8 @@ void UIManager::drawPlayerInfo(sf::RenderWindow& window, const GameManager& gm) 
 
     struct PlayerRow { std::string name; Color color; float timeLeft; float y; };
     std::vector<PlayerRow> rows = {
-        { "Black", Color::Black, m_blackTimeSeconds, 18.f },
-        { "White", Color::White, m_whiteTimeSeconds, 700.f }
+        { "Black", Color::Black, m_blackTimeSeconds, 10.f },
+        { "White", Color::White, m_whiteTimeSeconds, 545.f }
     };
 
     for (auto& row : rows) {
@@ -119,8 +121,8 @@ void UIManager::drawPlayerInfo(sf::RenderWindow& window, const GameManager& gm) 
 
 void UIManager::drawMoveHistory(sf::RenderWindow& window, const GameManager& gm) {
     float x   = m_panelX + 10.f;
-    float y   = 72.f;
-    float maxY = 620.f;
+    float y   = 65.f;
+    float maxY = 530.f;
 
     // Header
     sf::Text header;
@@ -228,31 +230,32 @@ void UIManager::drawStatus(sf::RenderWindow& window, const GameManager& gm) {
     status.setFillColor(statusColor);
     // Center in panel
     auto bounds = status.getLocalBounds();
-    status.setPosition(m_panelX + (m_panelWidth - bounds.width) * 0.5f, 632.f);
+    status.setPosition(m_panelX + (m_panelWidth - bounds.width) * 0.5f, 600.f);
     window.draw(status);
 }
 
 // ─── Buttons ─────────────────────────────────────────────────────────────────
 
-void UIManager::drawButtons(sf::RenderWindow& window) {
+void UIManager::drawButtons(sf::RenderWindow& window, const GameManager& gm) {
     struct BtnDef { sf::FloatRect* rect; std::string label; sf::Color color; };
     float bx   = m_panelX + 10.f;
     float bw   = (m_panelWidth - 25.f) * 0.5f;
     float bh   = 30.f;
 
-    m_btnNewGame = {bx,         656.f, bw, bh};
-    m_btnUndo    = {bx + bw + 5.f, 656.f, bw, bh};
-    m_btnFlip    = {bx,         694.f, bw, bh};
-    m_btnResign  = {bx + bw + 5.f, 694.f, bw, bh};
+    // ALways render system buttons at the bottom:
+    m_btnNewGame = {bx,         640.f, bw, bh};
+    m_btnUndo    = {bx + bw + 5.f, 640.f, bw, bh};
+    m_btnFlip    = {bx,         680.f, bw, bh};
+    m_btnResign  = {bx + bw + 5.f, 680.f, bw, bh};
 
-    std::vector<BtnDef> btns = {
-        {&m_btnNewGame, "New Game",  sf::Color(50, 130, 80)},
+    std::vector<BtnDef> sysBtns = {
+        {&m_btnNewGame, "New Game", sf::Color(50, 130, 80)},
         {&m_btnUndo,    "Undo",      sf::Color(80, 80, 140)},
         {&m_btnFlip,    "Flip Board",sf::Color(80, 100, 120)},
         {&m_btnResign,  "Resign",    sf::Color(140, 60, 60)},
     };
 
-    for (auto& btn : btns) {
+    for (auto& btn : sysBtns) {
         sf::RectangleShape shape(sf::Vector2f(btn.rect->width, btn.rect->height));
         shape.setPosition(btn.rect->left, btn.rect->top);
         shape.setFillColor(btn.color);
@@ -269,6 +272,61 @@ void UIManager::drawButtons(sf::RenderWindow& window) {
         label.setPosition(btn.rect->left + (btn.rect->width  - lb.width)  * 0.5f,
                            btn.rect->top  + (btn.rect->height - lb.height) * 0.5f - 2.f);
         window.draw(label);
+    }
+
+    if (gm.getGameState() == GameState::Promotion) {
+        // Draw separate BIG overlay for promotion
+        sf::RectangleShape overlay(sf::Vector2f(m_panelWidth - 20.f, 240.f));
+        overlay.setPosition(m_panelX + 10.f, 250.f);
+        overlay.setFillColor(sf::Color(40, 40, 40, 245));
+        overlay.setOutlineColor(sf::Color(100, 180, 255));
+        overlay.setOutlineThickness(2.f);
+        window.draw(overlay);
+
+        sf::Text promoTitle;
+        promoTitle.setFont(m_font);
+        promoTitle.setString("Choose Promotion:");
+        promoTitle.setCharacterSize(15);
+        promoTitle.setStyle(sf::Text::Bold);
+        promoTitle.setFillColor(sf::Color(255, 215, 0));
+        promoTitle.setPosition(m_panelX + 25.f, 260.f);
+        window.draw(promoTitle);
+
+        float pbx = m_panelX + 25.f;
+        float pbw = m_panelWidth - 50.f;
+        float pbh = 35.f;
+
+        m_btnPromoQ = {pbx, 290.f, pbw, pbh};
+        m_btnPromoR = {pbx, 335.f, pbw, pbh};
+        m_btnPromoB = {pbx, 380.f, pbw, pbh};
+        m_btnPromoN = {pbx, 425.f, pbw, pbh};
+
+        std::vector<BtnDef> promoBtns = {
+            {&m_btnPromoQ, "Queen",   sf::Color(100, 100, 180)},
+            {&m_btnPromoR, "Rook",    sf::Color(100, 180, 100)},
+            {&m_btnPromoB, "Bishop",  sf::Color(180, 100, 180)},
+            {&m_btnPromoN, "Knight",  sf::Color(180, 140, 60)},
+        };
+
+        for (auto& btn : promoBtns) {
+            sf::RectangleShape shape(sf::Vector2f(btn.rect->width, btn.rect->height));
+            shape.setPosition(btn.rect->left, btn.rect->top);
+            shape.setFillColor(btn.color);
+            shape.setOutlineColor(sf::Color::White);
+            shape.setOutlineThickness(1.f);
+            window.draw(shape);
+
+            sf::Text label;
+            label.setFont(m_font);
+            label.setString(btn.label);
+            label.setCharacterSize(14);
+            label.setStyle(sf::Text::Bold);
+            label.setFillColor(sf::Color::White);
+            auto lb = label.getLocalBounds();
+            label.setPosition(btn.rect->left + (btn.rect->width  - lb.width)  * 0.5f,
+                               btn.rect->top  + (btn.rect->height - lb.height) * 0.5f - 2.f);
+            window.draw(label);
+        }
     }
 }
 
@@ -292,20 +350,83 @@ void UIManager::drawCapturedPieces(sf::RenderWindow& window, const GameManager& 
     moveCount.setString(ms);
     moveCount.setCharacterSize(12);
     moveCount.setFillColor(sf::Color(100, 100, 100));
-    moveCount.setPosition(m_panelX + 10.f, 737.f);
+    moveCount.setPosition(m_panelX + 10.f, 725.f);
     window.draw(moveCount);
 }
 
 // ─── Button Clicks ────────────────────────────────────────────────────────────
 
-UIManager::ButtonResult UIManager::handleClick(sf::Vector2i pos) {
+UIManager::ButtonResult UIManager::handleClick(sf::Vector2i pos, GameState state) {
     ButtonResult result;
     sf::Vector2f fp(static_cast<float>(pos.x), static_cast<float>(pos.y));
+    
+    // Always check System buttons
     if (m_btnNewGame.contains(fp)) result.newGame = true;
     if (m_btnUndo.contains(fp))    result.undo    = true;
     if (m_btnFlip.contains(fp))    result.flip    = true;
     if (m_btnResign.contains(fp))  result.resign  = true;
+
+    // Check Promotion buttons if game is promoting
+    if (state == GameState::Promotion) {
+        if (m_btnPromoQ.contains(fp)) result.promoChoice = PieceType::Queen;
+        if (m_btnPromoR.contains(fp)) result.promoChoice = PieceType::Rook;
+        if (m_btnPromoB.contains(fp)) result.promoChoice = PieceType::Bishop;
+        if (m_btnPromoN.contains(fp)) result.promoChoice = PieceType::Knight;
+    }
     return result;
+}
+
+void UIManager::drawGameOver(sf::RenderWindow& window, const GameManager& gm) {
+    bool isGameOver = false;
+    std::string winnerText;
+
+    if (hasBlackTimedOut()) {
+        isGameOver = true;
+        winnerText = "White Wins!\nBy Timeout";
+    } else if (hasWhiteTimedOut()) {
+        isGameOver = true;
+        winnerText = "Black Wins!\nBy Timeout";
+    } else if (gm.getGameState() == GameState::Checkmate) {
+        isGameOver = true;
+        Color winner = (gm.getActiveColor() == Color::White) ? Color::Black : Color::White;
+        winnerText = (winner == Color::White) ? "White Wins!\nBy Checkmate" : "Black Wins!\nBy Checkmate";
+    } else if (gm.getGameState() == GameState::Stalemate) {
+        isGameOver = true;
+        winnerText = "Draw!\nBy Stalemate";
+    } else if (gm.getGameState() == GameState::Draw) {
+        isGameOver = true;
+        winnerText = "Game Drawn!";
+    }
+
+    if (!isGameOver) return;
+
+    // Dim the screen entirely
+    sf::RectangleShape overlay(sf::Vector2f(static_cast<float>(window.getSize().x), static_cast<float>(window.getSize().y)));
+    overlay.setFillColor(sf::Color(0, 0, 0, 150));
+    window.draw(overlay);
+
+    // Big Winner Box
+    float boxW = 400.f, boxH = 200.f;
+    float boxX = (640.f - boxW) / 2.f;  // board is 640px wide
+    float boxY = (640.f - boxH) / 2.f;
+
+    sf::RectangleShape box(sf::Vector2f(boxW, boxH));
+    box.setPosition(boxX, boxY);
+    box.setFillColor(sf::Color(30, 30, 30, 240));
+    box.setOutlineThickness(3.f);
+    box.setOutlineColor(sf::Color(200, 160, 50));
+    window.draw(box);
+
+    sf::Text text(winnerText, m_font, 36);
+    text.setFillColor(sf::Color::White);
+    text.setStyle(sf::Text::Bold);
+    
+    sf::FloatRect textBounds = text.getLocalBounds();
+    text.setPosition(
+        boxX + (boxW - textBounds.width) / 2.f,
+        boxY + (boxH - textBounds.height) / 2.f - textBounds.top
+    );
+    window.draw(text);
 }
 
 #endif

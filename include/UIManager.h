@@ -33,12 +33,17 @@ public:
         bool undo     = false;
         bool flip     = false;
         bool resign   = false;
+        PieceType promoChoice = PieceType::None;
     };
 
-    ButtonResult handleClick(sf::Vector2i pos);
+    ButtonResult handleClick(sf::Vector2i pos, GameState state = GameState::Playing);
 
     // Update game clock each frame
-    void update(GameState state, Color activeColor);
+    void update(GameState state, Color activeColor, const GameManager& gm);
+    void resetTimers() { m_whiteTimeSeconds = 600.f; m_blackTimeSeconds = 600.f; }
+
+    bool hasWhiteTimedOut() const { return m_whiteTimeSeconds <= 0.f; }
+    bool hasBlackTimedOut() const { return m_blackTimeSeconds <= 0.f; }
 
     float getPanelX()     const { return m_panelX; }
     float getPanelWidth() const { return m_panelWidth; }
@@ -48,8 +53,9 @@ private:
     void drawPlayerInfo(sf::RenderWindow& window, const GameManager& gm);
     void drawMoveHistory(sf::RenderWindow& window, const GameManager& gm);
     void drawStatus(sf::RenderWindow& window, const GameManager& gm);
-    void drawButtons(sf::RenderWindow& window);
+    void drawButtons(sf::RenderWindow& window, const GameManager& gm);
     void drawCapturedPieces(sf::RenderWindow& window, const GameManager& gm);
+    void drawGameOver(sf::RenderWindow& window, const GameManager& gm);
 
     sf::Font  m_font;
     float     m_panelX     = 680.f; // right of board (8*80 + 2*20)
@@ -60,6 +66,12 @@ private:
     sf::FloatRect m_btnUndo;
     sf::FloatRect m_btnFlip;
     sf::FloatRect m_btnResign;
+
+    // Promotion buttons
+    sf::FloatRect m_btnPromoQ;
+    sf::FloatRect m_btnPromoR;
+    sf::FloatRect m_btnPromoB;
+    sf::FloatRect m_btnPromoN;
 
     // Clocks (chess clock per side)
     float m_whiteTimeSeconds = 600.f; // 10 min default

@@ -15,13 +15,13 @@ static const float SQUARE_SIZE   = 80.f;
 static const float BOARD_OFFSET  = 20.f;
 static const float PANEL_WIDTH   = 240.f;
 static const unsigned WINDOW_W   = static_cast<unsigned>(BOARD_OFFSET * 2 + SQUARE_SIZE * 8 + PANEL_WIDTH);
-static const unsigned WINDOW_H   = static_cast<unsigned>(BOARD_OFFSET * 2 + SQUARE_SIZE * 8);
+static const unsigned WINDOW_H   = 760;
 
 int runSFML() {
     sf::RenderWindow window(
         sf::VideoMode(WINDOW_W, WINDOW_H),
         "Chess — C++ OOP",
-        sf::Style::Titlebar | sf::Style::Close
+        sf::Style::Default
     );
     window.setFramerateLimit(60);
 
@@ -63,6 +63,25 @@ int runSFML() {
             if (event.type == sf::Event::Closed)
                 window.close();
 
+            if (event.type == sf::Event::Resized) {
+                float windowRatio = static_cast<float>(event.size.width) / static_cast<float>(event.size.height);
+                float viewRatio   = static_cast<float>(WINDOW_W) / static_cast<float>(WINDOW_H);
+                float sizeX = 1.f; float sizeY = 1.f;
+                float posX = 0.f;  float posY = 0.f;
+
+                if (windowRatio > viewRatio) {
+                    sizeX = viewRatio / windowRatio;
+                    posX  = (1.f - sizeX) / 2.f;
+                } else {
+                    sizeY = windowRatio / viewRatio;
+                    posY  = (1.f - sizeY) / 2.f;
+                }
+
+                sf::View view(sf::FloatRect(0.f, 0.f, static_cast<float>(WINDOW_W), static_cast<float>(WINDOW_H)));
+                view.setViewport(sf::FloatRect(posX, posY, sizeX, sizeY));
+                window.setView(view);
+            }
+
             if (event.type == sf::Event::KeyPressed) {
                 if (event.key.code == sf::Keyboard::Escape)
                     window.close();
@@ -83,24 +102,23 @@ int runSFML() {
             if (event.type == sf::Event::MouseButtonPressed &&
                 event.mouseButton.button == sf::Mouse::Left)
             {
-                sf::Vector2i mousePos(event.mouseButton.x, event.mouseButton.y);
+                sf::Vector2f mappedPosF = window.mapPixelToCoords(sf::Vector2i(event.mouseButton.x, event.mouseButton.y));
+                sf::Vector2i mousePos(static_cast<int>(mappedPosF.x), static_cast<int>(mappedPosF.y));
 
-                // Promotion dialog active?
+                // UI panel buttons / Promotion?
+                auto btnResult = ui.handleClick(mousePos, gm.getGameState());
+
                 if (gm.getGameState() == Chess::GameState::Promotion) {
-                    Chess::PieceType choice = renderer.getPromotionChoice(
-                        mousePos, gm.getActiveColor());
-                    if (choice != Chess::PieceType::None) {
-                        gm.tryPromote(choice);
+                    if (btnResult.promoChoice != Chess::PieceType::None) {
+                        gm.tryPromote(btnResult.promoChoice);
                         selectedSquare = std::nullopt;
                         legalMoves.clear();
                     }
                     continue;
                 }
-
-                // UI panel buttons?
-                auto btnResult = ui.handleClick(mousePos);
                 if (btnResult.newGame) {
                     gm.newGame();
+                    ui.resetTimers();
                     selectedSquare = std::nullopt;
                     legalMoves.clear();
                     lastMoveFrom = lastMoveTo = std::nullopt;
@@ -116,6 +134,9 @@ int runSFML() {
                 if (btnResult.flip) { renderer.flipBoard(); continue; }
                 if (btnResult.resign) { gm.resign(gm.getActiveColor()); continue; }
 
+                // Stop interaction if game is over
+                if (gm.isGameOver() || ui.hasWhiteTimedOut() || ui.hasBlackTimedOut()) continue;
+
                 // Board click?
                 auto sq = renderer.pixelToSquare(mousePos);
                 if (!sq) continue;
@@ -123,6 +144,14 @@ int runSFML() {
                 Chess::Piece* piece = gm.getBoard().getPieceAt(*sq);
 
                 if (selectedSquare) {
+                    // Normalize target if dropping King onto own Rook for castling
+                    Chess::Piece* origP = gm.getBoard().getPieceAt(*selectedSquare);
+                    if (origP && origP->getType() == Chess::PieceType::King && piece && 
+                        piece->getType() == Chess::PieceType::Rook && piece->getColor() == origP->getColor()) {
+                        if (sq->file == 0) sq->file = 2;
+                        else if (sq->file == 7) sq->file = 6;
+                    }
+
                     // Try to make the move
                     Chess::Move attemptedMove(*selectedSquare, *sq);
 
@@ -130,9 +159,11 @@ int runSFML() {
                     bool moved = false;
                     for (auto& lm : legalMoves) {
                         if (lm.to == *sq) {
-                            // For promotions with no explicit choice, default to Queen
-                            // (promotion dialog will show if needed)
-                            attemptedMove.promoteTo = lm.promoteTo;
+                            if (lm.type == Chess::MoveType::Promotion || lm.type == Chess::MoveType::PromotionCapture) {
+                                attemptedMove.promoteTo = Chess::PieceType::None;
+                            } else {
+                                attemptedMove.promoteTo = lm.promoteTo;
+                            }
                             if (gm.tryMove(attemptedMove)) {
                                 lastMoveFrom = selectedSquare;
                                 lastMoveTo   = sq;
@@ -172,10 +203,10 @@ int runSFML() {
 
             // ── Mouse Move (drag) ──────────────────────────────────────────
             if (event.type == sf::Event::MouseMoved && dragging) {
+                sf::Vector2f mappedPosF = window.mapPixelToCoords(sf::Vector2i(event.mouseMove.x, event.mouseMove.y));
                 renderer.setDragPiece(
                     gm.getBoard().getPieceAt(dragOrigin),
-                    sf::Vector2f(static_cast<float>(event.mouseMove.x),
-                                  static_cast<float>(event.mouseMove.y)));
+                    mappedPosF);
             }
 
             // ── Mouse Button Released (drop) ───────────────────────────────
@@ -187,14 +218,28 @@ int runSFML() {
 
                 if (gm.getGameState() == Chess::GameState::Promotion) continue;
 
-                sf::Vector2i mousePos(event.mouseButton.x, event.mouseButton.y);
+                sf::Vector2f mappedPosF = window.mapPixelToCoords(sf::Vector2i(event.mouseButton.x, event.mouseButton.y));
+                sf::Vector2i mousePos(static_cast<int>(mappedPosF.x), static_cast<int>(mappedPosF.y));
                 auto dropSq = renderer.pixelToSquare(mousePos);
 
                 if (dropSq && *dropSq != dragOrigin && selectedSquare) {
+                    // Normalize target if dropping King onto own Rook for castling
+                    Chess::Piece* origP = gm.getBoard().getPieceAt(dragOrigin);
+                    Chess::Piece* destP = gm.getBoard().getPieceAt(*dropSq);
+                    if (origP && origP->getType() == Chess::PieceType::King && destP && 
+                        destP->getType() == Chess::PieceType::Rook && destP->getColor() == origP->getColor()) {
+                        if (dropSq->file == 0) dropSq->file = 2;
+                        else if (dropSq->file == 7) dropSq->file = 6;
+                    }
+
                     Chess::Move attemptedMove(dragOrigin, *dropSq);
                     for (auto& lm : legalMoves) {
                         if (lm.to == *dropSq) {
-                            attemptedMove.promoteTo = lm.promoteTo;
+                            if (lm.type == Chess::MoveType::Promotion || lm.type == Chess::MoveType::PromotionCapture) {
+                                attemptedMove.promoteTo = Chess::PieceType::None;
+                            } else {
+                                attemptedMove.promoteTo = lm.promoteTo;
+                            }
                             if (gm.tryMove(attemptedMove)) {
                                 lastMoveFrom = dragOrigin;
                                 lastMoveTo   = dropSq;
@@ -210,7 +255,13 @@ int runSFML() {
         }
 
         // ── Update ─────────────────────────────────────────────────────────
-        ui.update(gm.getGameState(), gm.getActiveColor());
+        ui.update(gm.getGameState(), gm.getActiveColor(), gm);
+
+        // ── Check Timeouts ─────────────────────────────────────────────────
+        if (!gm.isGameOver()) {
+            if (ui.hasWhiteTimedOut()) gm.resign(Chess::Color::White);
+            else if (ui.hasBlackTimedOut()) gm.resign(Chess::Color::Black);
+        }
 
         // ── Find king in check ─────────────────────────────────────────────
         std::optional<Chess::Square> checkKing;
@@ -227,8 +278,6 @@ int runSFML() {
 
         ui.render(window, gm);
 
-        if (gm.getGameState() == Chess::GameState::Promotion)
-            renderer.renderPromotionDialog(window, gm.getActiveColor());
 
         window.display();
     }

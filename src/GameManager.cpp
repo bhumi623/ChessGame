@@ -145,9 +145,6 @@ bool GameManager::undoLastMove() {
     };
 
     undoOne();
-    // If it was black's turn (we just undid white's move), undo one more
-    if (!m_history.empty() && m_activeColor == Color::Black)
-        undoOne();
 
     m_gameState              = MoveValidator::detectGameState(m_board, m_activeColor);
     m_pendingPromotionSquare = std::nullopt;
